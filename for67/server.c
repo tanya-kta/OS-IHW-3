@@ -20,7 +20,6 @@ void handleObserver(int serv_sock) {
             dieWithError("send() failed");
         }
         sem_post(&obs_p->parent_sem);
-        sleep(2);
     }
     close(shmid);
     close(clnt_socket);
@@ -67,8 +66,14 @@ int main(int argc, char *argv[]) {
             dieWithError("Creating child semaphore went wrong");
         }
         if (sem_init(&msg_p[i].parent_sem, 1, 0) == -1) {
-            dieWithError("Creating child semaphore went wrong");
+            dieWithError("Creating parent semaphore went wrong");
         }
+    }
+    if (sem_init(&obs_p->child_sem, 1, 0) == -1) {
+        dieWithError("Creating child semaphore went wrong");
+    }
+    if (sem_init(&obs_p->parent_sem, 1, 0) == -1) {
+        dieWithError("Creating parent semaphore went wrong");
     }
     prev = signal(SIGINT, parentHandleCtrlC);
 
@@ -96,7 +101,9 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
     sem_wait(&obs_p->parent_sem);
+    obs_p->type = MSG_TYPE_STRING;
 
+    char message[10000];
     int in_file = open(argv[2], O_RDONLY, S_IRWXU);
     int out_file = open(argv[3], O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU);
     int status = 1;
@@ -104,29 +111,42 @@ int main(int argc, char *argv[]) {
         int num_of_running = 0;
         for (int i = 0; i < process_number; ++i, ++num_of_running) {
             int size = 0;
+            sprintf(message, "Send to client id %d message to decode: ", i);
+            int last_char = strlen(message);
             for (; size < MAX_INTS; ++size) {
                 status = readInt(in_file, &msg_p[i].coded[size]);
                 if (status == -1) {
                     break;
                 }
+                sprintf(message + last_char, "%d ", msg_p[i].coded[size]);
+                last_char = strlen(message);
             }
             if (size == 0) {
                 break;
             }
             msg_p[i].size = size;
             msg_p[i].type = MSG_TYPE_INT;
+            sprintf(obs_p->message, "%s", message);
             sem_post(&msg_p[i].child_sem);
-
+            sem_post(&obs_p->child_sem);
+            sem_wait(&obs_p->parent_sem);
         }
 
         for (int i = 0; i < num_of_running; ++i) {
             sem_wait(&msg_p[i].parent_sem);
+            sprintf(message, "Received from client id %d decoded message: ", i);
+            int last_char = strlen(message);
             printf("server parent from child id %d process after client decoding: ", i);
             for (int j = 0; j < msg_p[i].size; ++j) {
                 printf("%c", msg_p[i].uncoded[j]);
+                sprintf(message + last_char, "%c", msg_p[i].uncoded[j]);
+                last_char = strlen(message);
                 write(out_file, &msg_p[i].uncoded[j], 1);
             }
             printf("\n");
+            sprintf(obs_p->message, "%s", message);
+            sem_post(&obs_p->child_sem);
+            sem_wait(&obs_p->parent_sem);
         }
     }
     close(in_file);
@@ -136,13 +156,18 @@ int main(int argc, char *argv[]) {
         msg_p[i].type = MSG_TYPE_FINISH;
         sem_post(&msg_p[i].child_sem);
     }
+    obs_p->type = MSG_TYPE_FINISH;
+    sem_post(&obs_p->child_sem);
     for (int i = 0; i < process_number; ++i) {
         sem_wait(&msg_p[i].parent_sem);
     }
+    sem_wait(&obs_p->parent_sem);
     for (int i = 0; i < process_number; ++i) {
         sem_destroy(&msg_p[i].child_sem);
         sem_destroy(&msg_p[i].parent_sem);
     }
+    sem_destroy(&obs_p->parent_sem);
+    sem_destroy(&obs_p->child_sem);
     close(shmid);
     if (shm_unlink(mem_name) == -1) {
         perror("shm_unlink");
