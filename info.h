@@ -38,6 +38,15 @@ typedef struct {
 
 message_t *msg_p = NULL;  // адрес сообщения в разделяемой памяти
 
+typedef struct {
+    int type;
+    sem_t child_sem;
+    sem_t parent_sem;
+    char message[10000];
+} observer_t;
+
+observer_t *obs_p = NULL; // адрес сообщения наблюдателю
+
 void dieWithError(char *error_message) {
     perror(error_message);
     exit(1);
@@ -140,7 +149,7 @@ void handleTcpClient(int serv_sock, int id) {
     }
     close(shmid);
     close(clnt_socket);    /* Close client socket */
-    close(serv_sock);    /* Close client socket */
+    close(serv_sock);
     sem_post(&msg_p[id].parent_sem);
 }
 
