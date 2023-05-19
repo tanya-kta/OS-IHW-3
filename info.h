@@ -4,19 +4,62 @@
 #include <sys/shm.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <semaphore.h>
 #include <sys/socket.h> /* for socket(), bind(), and connect() */
 #include <arpa/inet.h>  /* for sockaddr_in and inet_ntoa() */
 #include <string.h>     /* for memset() */
 #include <unistd.h>     /* for close() */
 #include <fcntl.h>
+#include <sys/mman.h>
 
+#define MSG_TYPE_INT    1     // сообщение о передаче кодированных чисел
+#define MSG_TYPE_STRING 2     // сообщение о передаче декодированной строки
+#define MSG_TYPE_FINISH 3     // сообщение о том, что пора завершать обмен
 #define MAX_INTS        30    // максимальная длина текстового сообщения
 #define MAXPENDING      5     /* Maximum outstanding connection requests */
 
 
+void (*prev)(int);
+char *mem_name = "my memory to share";
+int shmid = -1;
+int process_number;
+
+// структура сообщения, помещаемого в разделяемую память
+typedef struct {
+    int type;
+    int size;
+    sem_t child_sem;
+    sem_t parent_sem;
+    union {
+        char uncoded[MAX_INTS * sizeof(int)];
+        int coded[MAX_INTS];
+    };
+} message_t;
+
+message_t *msg_p = NULL;  // адрес сообщения в разделяемой памяти
+
 void dieWithError(char *error_message) {
     perror(error_message);
     exit(1);
+}
+
+void parentHandleCtrlC(int nsig){
+    printf("Receive signal %d, CTRL-C pressed\n", nsig);
+
+    for (int i = 0; msg_p != NULL && i < process_number; ++i) {
+        sem_destroy(&msg_p[i].child_sem);
+        sem_destroy(&msg_p[i].parent_sem);
+    }
+    printf("Закрыты семафоры детей\n");
+    printf("Закрыты семафоры родителя\n");
+    if ((shmid = shm_open(mem_name, O_CREAT | O_RDWR, S_IRWXU)) == -1) {
+        if (shm_unlink(mem_name) == -1) {
+            perror("shm_unlink");
+            dieWithError("server: error getting pointer to shared memory");
+        }
+    }
+    printf("Закрыта разделяемая память, переход к original handler\n");
+    prev(nsig);
 }
 
 int createTcpServerSocket(unsigned short port) {
