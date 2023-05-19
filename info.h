@@ -110,31 +110,38 @@ int acceptTcpConnection(int serv_sock) {
     return clnt_sock;
 }
 
-void getDecoder(int *decoder, char *filename) {
-    int file = open(filename, O_RDONLY, S_IRWXU);
-    char letter;
-    char line[13];
-    int code;
-    for (int i = 0; i < 26; ++i) {
-        for (int ind = 0; ind < 12; ++ind) {
-            int num = read(file, &line[ind], sizeof(char));
-            if (num == 0 || line[ind] == '\n' || line[ind] == '\0') {
-                line[ind] = '\0';
-                break;
-            }
-        }
-        sscanf(line, "%c %d", &letter, &code);
-        decoder[letter - 'a'] = code;
-    }
-}
+void handleTcpClient(int serv_sock, int id) {
+    int clnt_socket = acceptTcpConnection(serv_sock);
 
-char getCodedLetter(int *decoder, int code) {
-    for (int i = 0; i < 26; ++i) {
-        if (decoder[i] == code) {
-            return 'a' + i;
+    char buffer[MAX_INTS];
+
+    sem_post(&msg_p[id].parent_sem);
+    while (1) {
+        sem_wait(&msg_p[id].child_sem);
+        if (msg_p[id].type == MSG_TYPE_FINISH) {
+            break;
         }
+        if (send(clnt_socket, &msg_p[id].coded, msg_p[id].size * 4, 0) != msg_p[id].size * 4) {
+            dieWithError("send() failed");
+        }
+        sleep(2);
+
+        int recv_msg_size;
+        if ((recv_msg_size = recv(clnt_socket, buffer, MAX_INTS, 0)) < 0) {
+            dieWithError("recv() failed");
+        }
+        msg_p[id].size = recv_msg_size;
+        for (int i = 0; i < msg_p[id].size; ++i) {
+            msg_p[id].uncoded[i] = buffer[i];
+        }
+
+        msg_p[id].type = MSG_TYPE_STRING;
+        sem_post(&msg_p[id].parent_sem);
     }
-    return 0;
+    close(shmid);
+    close(clnt_socket);    /* Close client socket */
+    close(serv_sock);    /* Close client socket */
+    sem_post(&msg_p[id].parent_sem);
 }
 
 int readInt(int file, int *p) {

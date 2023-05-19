@@ -6,40 +6,6 @@
 #include <fcntl.h>
 
 
-void handleTcpClient(int serv_sock, int id) {
-    int clnt_socket = acceptTcpConnection(serv_sock);
-
-    char buffer[MAX_INTS];
-
-    sem_post(&msg_p[id].parent_sem);
-    while (1) {
-        sem_wait(&msg_p[id].child_sem);
-        if (msg_p[id].type == MSG_TYPE_FINISH) {
-            break;
-        }
-        if (send(clnt_socket, &msg_p[id].coded, msg_p[id].size * 4, 0) != msg_p[id].size * 4) {
-            dieWithError("send() failed");
-        }
-        sleep(2);
-
-        int recv_msg_size;
-        if ((recv_msg_size = recv(clnt_socket, buffer, MAX_INTS, 0)) < 0) {
-            dieWithError("recv() failed");
-        }
-        msg_p[id].size = recv_msg_size;
-        for (int i = 0; i < msg_p[id].size; ++i) {
-            msg_p[id].uncoded[i] = buffer[i];
-        }
-
-        msg_p[id].type = MSG_TYPE_STRING;
-        sem_post(&msg_p[id].parent_sem);
-    }
-    close(shmid);
-    close(clnt_socket);    /* Close client socket */
-    close(serv_sock);    /* Close client socket */
-    sem_post(&msg_p[id].parent_sem);
-}
-
 int main(int argc, char *argv[]) {
     int serv_sock;                     /* Socket descriptor for server */
     unsigned short echo_serv_port;     /* Server port */
@@ -148,12 +114,13 @@ int main(int argc, char *argv[]) {
     while (process_number) /* Clean up all zombies */
     {
         int process_id = waitpid((pid_t) -1, NULL, WNOHANG);  /* Non-blocking wait */
-        if (process_id < 0)  /* waitpid() error? */
+        if (process_id < 0)  /* waitpid() error? */ {
             dieWithError("waitpid() failed");
-        else if (process_id == 0)  /* No zombie to wait on */
+        } else if (process_id == 0)  /* No zombie to wait on */ {
             break;
-        else
-            process_number--;  /* Cleaned up after a child */
+        } else {
+            process_number--; /* Cleaned up after a child */
+        }
     }
     close(serv_sock);    /* Close client socket */
 }

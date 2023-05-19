@@ -4,7 +4,7 @@
 #include <stdlib.h>     /* for atoi() and exit() */
 #include <string.h>     /* for memset() */
 #include <unistd.h>     /* for close() */
-#include "../info.h"
+#include "../clientInfo.h"
 
 
 int main(int argc, char *argv[])
