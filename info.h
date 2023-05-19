@@ -59,6 +59,10 @@ void parentHandleCtrlC(int nsig){
         sem_destroy(&msg_p[i].child_sem);
         sem_destroy(&msg_p[i].parent_sem);
     }
+    if (obs_p != NULL) {
+        sem_destroy(&obs_p->child_sem);
+        sem_destroy(&obs_p->parent_sem);
+    }
     printf("Закрыты семафоры детей\n");
     printf("Закрыты семафоры родителя\n");
     if ((shmid = shm_open(mem_name, O_CREAT | O_RDWR, S_IRWXU)) == -1) {
