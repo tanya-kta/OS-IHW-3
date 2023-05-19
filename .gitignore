@@ -5,6 +5,8 @@
 */run
 */r1
 */r2
+*/client
+*/server
 CMakeLists.txt
 
 # Prerequisites
