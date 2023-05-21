@@ -16,7 +16,7 @@
 #define MSG_TYPE_STRING 2     // сообщение о передаче декодированной строки
 #define MSG_TYPE_FINISH 3     // сообщение о том, что пора завершать обмен
 #define MAX_INTS        30    // максимальная длина текстового сообщения
-#define MAXPENDING      5     /* Maximum outstanding connection requests */
+#define MAXPENDING      10    /* Maximum outstanding connection requests */
 
 
 void (*prev)(int);
